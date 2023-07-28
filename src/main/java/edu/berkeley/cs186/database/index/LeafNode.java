@@ -147,24 +147,36 @@ class LeafNode extends BPlusNode {
     @Override
     public LeafNode get(DataBox key) {
         // TODO(proj2): implement
-
-        return null;
+        return this;
     }
 
     // See BPlusNode.getLeftmostLeaf.
     @Override
     public LeafNode getLeftmostLeaf() {
         // TODO(proj2): implement
-
-        return null;
+        return this;
     }
 
     // See BPlusNode.put.
     @Override
     public Optional<Pair<DataBox, Long>> put(DataBox key, RecordId rid) {
         // TODO(proj2): implement
+        if (keys.contains(key)) throw new BPlusTreeException("insert duplicate entries with the same key");
+        if (keys.size() <= metadata.getOrder() * 2) {
+            sync();
+            return Optional.empty();
+        } else {
+            List<DataBox> right_keys = keys.subList(metadata.getOrder(), keys.size());
+            List<RecordId> right_rids = rids.subList(metadata.getOrder(), rids.size());
 
-        return Optional.empty();
+            keys = keys.subList(0, metadata.getOrder());
+            rids = rids.subList(0, metadata.getOrder());
+
+            LeafNode right_leafnode = new LeafNode(metadata, bufferManager, right_keys, right_rids, rightSibling, treeContext);
+            rightSibling = Optional.of(right_leafnode.getPage().getPageNum());
+            sync();
+            return Optional.of(new Pair<>(right_keys.get(0), right_leafnode.getPage().getPageNum()));
+        }
     }
 
     // See BPlusNode.bulkLoad.
@@ -172,7 +184,26 @@ class LeafNode extends BPlusNode {
     public Optional<Pair<DataBox, Long>> bulkLoad(Iterator<Pair<DataBox, RecordId>> data,
             float fillFactor) {
         // TODO(proj2): implement
-
+        Integer maxRecord = (int) Math.ceil(fillFactor * metadata.getOrder() * 2);
+        while(keys.size() < maxRecord && data.hasNext())
+        {
+            Pair<DataBox, RecordId> nextData = data.next();
+            keys.add(nextData.getFirst());
+            rids.add(nextData.getSecond());
+        }
+        if (data.hasNext())
+        {
+            Pair<DataBox, RecordId> nextData = data.next();
+            List<DataBox> rightKeys = new ArrayList<>();
+            List<RecordId> rightRids = new ArrayList<>();
+            rightKeys.add(nextData.getFirst());
+            rightRids.add(nextData.getSecond());
+            LeafNode rightLeafnode = new LeafNode(metadata, bufferManager, rightKeys, rightRids, rightSibling, treeContext);
+            rightSibling = Optional.of(rightLeafnode.getPage().getPageNum());
+            sync();
+            return Optional.of(new Pair<>(rightKeys.get(0), rightLeafnode.getPage().getPageNum()));
+        }
+        sync();
         return Optional.empty();
     }
 
