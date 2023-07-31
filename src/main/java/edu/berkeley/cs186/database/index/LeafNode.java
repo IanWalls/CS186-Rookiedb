@@ -162,6 +162,10 @@ class LeafNode extends BPlusNode {
     public Optional<Pair<DataBox, Long>> put(DataBox key, RecordId rid) {
         // TODO(proj2): implement
         if (keys.contains(key)) throw new BPlusTreeException("insert duplicate entries with the same key");
+        int index = InnerNode.numLessThan(key, keys);
+        keys.add(index, key);
+        rids.add(index, rid);
+
         if (keys.size() <= metadata.getOrder() * 2) {
             sync();
             return Optional.empty();
@@ -211,7 +215,12 @@ class LeafNode extends BPlusNode {
     @Override
     public void remove(DataBox key) {
         // TODO(proj2): implement
-
+        Integer index = keys.indexOf(key);
+        if (index >= 0) {
+            keys.remove(index);
+            rids.remove(index);
+            sync();
+        }
         return;
     }
 

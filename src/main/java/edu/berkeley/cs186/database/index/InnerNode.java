@@ -7,8 +7,10 @@ import edu.berkeley.cs186.database.databox.DataBox;
 import edu.berkeley.cs186.database.databox.Type;
 import edu.berkeley.cs186.database.memory.BufferManager;
 import edu.berkeley.cs186.database.memory.Page;
+import edu.berkeley.cs186.database.query.aggr.DataFunction;
 import edu.berkeley.cs186.database.table.RecordId;
 
+import javax.xml.crypto.Data;
 import java.nio.ByteBuffer;
 import java.util.*;
 
@@ -81,8 +83,8 @@ class InnerNode extends BPlusNode {
     @Override
     public LeafNode get(DataBox key) {
         // TODO(proj2): implement
-
-        return null;
+        BPlusNode child = BPlusNode.fromBytes(metadata, bufferManager, treeContext, children.get(numLessThanEqual(key,keys)));
+        return child.get(key);
     }
 
     // See BPlusNode.getLeftmostLeaf.
@@ -90,16 +92,51 @@ class InnerNode extends BPlusNode {
     public LeafNode getLeftmostLeaf() {
         assert(children.size() > 0);
         // TODO(proj2): implement
+        BPlusNode child = BPlusNode.fromBytes(metadata, bufferManager, treeContext, children.get(0));
+        return child.getLeftmostLeaf();
+    }
 
-        return null;
+    private Optional<Pair<DataBox, Long>> insert(DataBox key, Long Child)
+    {
+        int index = InnerNode.numLessThan(key,keys);
+        keys.add(index, key);
+        children.add(index+1, Child);
+        if (keys.size() < metadata.getOrder() * 2)
+        {
+            sync();
+            return Optional.empty();
+        }
+        else
+        {
+            DataBox split_pos = keys.get(metadata.getOrder());
+            List<DataBox> right_keys = keys.subList(metadata.getOrder() + 1, keys.size());
+            List<Long> right_child = children.subList(metadata.getOrder()+1, children.size());
+
+            keys = keys.subList(0, metadata.getOrder());
+            children = children.subList(0, metadata.getOrder());
+
+            sync();
+
+            InnerNode rightSibling = new InnerNode(metadata, bufferManager, right_keys, right_child, treeContext);
+
+            return Optional.of(new Pair<>(split_pos, rightSibling.getPage().getPageNum()));
+        }
     }
 
     // See BPlusNode.put.
     @Override
     public Optional<Pair<DataBox, Long>> put(DataBox key, RecordId rid) {
         // TODO(proj2): implement
-
-        return Optional.empty();
+        BPlusNode childNode = BPlusNode.fromBytes(metadata, bufferManager, treeContext, children.get(numLessThanEqual(key,keys)));
+        Optional<Pair<DataBox, Long>> childRet = childNode.put(key, rid);
+        if (!childRet.isPresent())
+        {
+            return childRet;
+        }
+        else
+        {
+            return this.insert(childRet.get().getFirst(), childRet.get().getSecond());
+        }
     }
 
     // See BPlusNode.bulkLoad.
@@ -107,8 +144,24 @@ class InnerNode extends BPlusNode {
     public Optional<Pair<DataBox, Long>> bulkLoad(Iterator<Pair<DataBox, RecordId>> data,
             float fillFactor) {
         // TODO(proj2): implement
-
-        return Optional.empty();
+        BPlusNode rightNode = BPlusNode.fromBytes(metadata, bufferManager, treeContext, children.get(children.size()-1));
+        Optional<Pair<DataBox, Long>> childRet = rightNode.bulkLoad(data, fillFactor);
+        if (!childRet.isPresent())
+        {
+            return childRet;
+        } else
+        {
+            DataBox splitKey = childRet.get().getFirst();
+            Long Child = childRet.get().getSecond();
+            Optional<Pair<DataBox, Long>> childInsertRet = insert(splitKey, Child);
+            if (!childInsertRet.isPresent())
+            {
+                return bulkLoad(data, fillFactor);
+            } else
+            {
+                return childInsertRet;
+            }
+        }
     }
 
     // See BPlusNode.remove.
