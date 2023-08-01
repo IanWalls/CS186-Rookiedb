@@ -147,7 +147,7 @@ public class BPlusTree {
 
         // TODO(proj2): implement
 
-        return Optional.empty();
+        return root.get(key).getKey(key);
     }
 
     /**
@@ -203,7 +203,7 @@ public class BPlusTree {
 
         // TODO(proj2): Return a BPlusTreeIterator.
 
-        return Collections.emptyIterator();
+        return new BPlusTreeIterator(root.getLeftmostLeaf());
     }
 
     /**
@@ -235,8 +235,8 @@ public class BPlusTree {
         LockUtil.ensureSufficientLockHeld(lockContext, LockType.NL);
 
         // TODO(proj2): Return a BPlusTreeIterator.
-
-        return Collections.emptyIterator();
+        LeafNode startNode = root.get(key);
+        return new BPlusTreeIterator(startNode, key);
     }
 
     /**
@@ -254,11 +254,27 @@ public class BPlusTree {
         LockUtil.ensureSufficientLockHeld(lockContext, LockType.NL);
 
         // TODO(proj2): implement
+        Optional<Pair<DataBox, Long>> putResult = root.put(key, rid);
+        if (!putResult.isPresent()) {
+            return;
+        } else {
+            splitRoot(putResult.get().getFirst(), putResult.get().getSecond());
+        }
         // Note: You should NOT update the root variable directly.
         // Use the provided updateRoot() helper method to change
         // the tree's root if the old root splits.
 
         return;
+    }
+
+    private void splitRoot(DataBox first, Long second) {
+        List<DataBox> keys = new ArrayList<>();
+        List<Long> children = new ArrayList<>();
+        keys.add(first);
+        children.add(root.getPage().getPageNum());
+        children.add(second);
+        InnerNode newRoot = new InnerNode(metadata, bufferManager, keys, children, lockContext);
+        updateRoot(newRoot);
     }
 
     /**
@@ -286,7 +302,21 @@ public class BPlusTree {
         // Note: You should NOT update the root variable directly.
         // Use the provided updateRoot() helper method to change
         // the tree's root if the old root splits.
-
+        if (scanAll().hasNext())
+        {
+            throw new BPlusTreeException("Tree is not empty");
+        }
+        else
+        {
+            while(data.hasNext())
+            {
+                Optional<Pair<DataBox, Long>> loadResult = root.bulkLoad(data, fillFactor);
+                if (loadResult.isPresent())
+                {
+                    splitRoot(loadResult.get().getFirst(), loadResult.get().getSecond());
+                }
+            }
+        }
         return;
     }
 
@@ -307,7 +337,7 @@ public class BPlusTree {
         LockUtil.ensureSufficientLockHeld(lockContext, LockType.NL);
 
         // TODO(proj2): implement
-
+        root.remove(key);
         return;
     }
 
@@ -421,19 +451,45 @@ public class BPlusTree {
     // Iterator ////////////////////////////////////////////////////////////////
     private class BPlusTreeIterator implements Iterator<RecordId> {
         // TODO(proj2): Add whatever fields and constructors you want here.
+        LeafNode currNode;
+        Iterator<RecordId> currIter;
+
+        public BPlusTreeIterator(LeafNode node) {
+            currNode = node;
+            currIter = currNode.scanAll();
+        }
+
+        public BPlusTreeIterator(LeafNode node, DataBox key) {
+            currNode = node;
+            currIter = currNode.scanGreaterEqual(key);
+        }
 
         @Override
         public boolean hasNext() {
             // TODO(proj2): implement
-
-            return false;
+            if (currIter.hasNext()) {
+                return true;
+            } else {
+                if (currNode.getRightSibling().isPresent())
+                {
+                    LeafNode rightSibling = currNode.getRightSibling().get();
+                    currNode = rightSibling;
+                    currIter = currNode.scanAll();
+                    return currIter.hasNext();
+                } else {
+                    return false;
+                }
+            }
         }
 
         @Override
         public RecordId next() {
             // TODO(proj2): implement
-
-            throw new NoSuchElementException();
+            if (hasNext()) {
+                return currIter.next();
+            } else {
+                throw new NoSuchElementException();
+            }
         }
     }
 }
