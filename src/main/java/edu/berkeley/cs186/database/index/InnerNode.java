@@ -101,7 +101,7 @@ class InnerNode extends BPlusNode {
         int index = InnerNode.numLessThan(key,keys);
         keys.add(index, key);
         children.add(index+1, Child);
-        if (keys.size() < metadata.getOrder() * 2)
+        if (keys.size() <= metadata.getOrder() * 2)
         {
             sync();
             return Optional.empty();
@@ -113,7 +113,7 @@ class InnerNode extends BPlusNode {
             List<Long> right_child = children.subList(metadata.getOrder()+1, children.size());
 
             keys = keys.subList(0, metadata.getOrder());
-            children = children.subList(0, metadata.getOrder());
+            children = children.subList(0, metadata.getOrder()+1);
 
             sync();
 

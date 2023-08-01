@@ -215,7 +215,7 @@ class LeafNode extends BPlusNode {
     @Override
     public void remove(DataBox key) {
         // TODO(proj2): implement
-        Integer index = keys.indexOf(key);
+        int index = keys.indexOf(key);
         if (index >= 0) {
             keys.remove(index);
             rids.remove(index);
@@ -421,9 +421,16 @@ class LeafNode extends BPlusNode {
 
         byte nodeType = buf.get();
         assert (nodeType == (byte) 1);
-
-
-        return null;
+        Long rs = buf.getLong();
+        Optional<Long> rightSibling = rs == -1 ? Optional.empty() : Optional.of(rs);
+        int size = buf.getInt();
+        List<DataBox> keys = new ArrayList<>();
+        List<RecordId> rids = new ArrayList<>();
+        for (int i = 0; i < size; i++) {
+            keys.add(DataBox.fromBytes(buf, metadata.getKeySchema()));
+            rids.add(RecordId.fromBytes(buf));
+        }
+        return new LeafNode(metadata, bufferManager, page, keys, rids, rightSibling, treeContext);
     }
 
     // Builtins ////////////////////////////////////////////////////////////////
